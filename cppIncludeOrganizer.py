@@ -59,9 +59,9 @@ class CppIncludeOrganizer (object):
         while True: 
             if not parentSourcesDir:
                 parentSourcesDir = self._file.parent
-            elif parentSourcesDir.name != "Sources":
+            else:
                 parentSourcesDir = parentSourcesDir.parent
-            elif (parentSourcesDir / "BuildNum.dat").is_file ():
+            if parentSourcesDir.name == "Sources" and (parentSourcesDir / "BuildNum.dat").is_file ():
                 break
 
         strParentSourcesDir = str (parentSourcesDir)
