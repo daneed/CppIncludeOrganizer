@@ -150,7 +150,7 @@ class CppIncludeOrganizer (object):
         for key in theDict:
             foundName = None
             for item in theDict[key]:
-                if self._file.stem == pathlib.Path (item).stem:
+                if self._file.stem.lower () == pathlib.Path (item).stem.lower ():
                     print (f"#include \"{item}\"")
                     print ("")
                     foundName = item
@@ -159,7 +159,7 @@ class CppIncludeOrganizer (object):
                 theDict[key].remove (foundName)
                 break
 
-        for key in sorted (theDict):
+        for key in sorted (theDict, key=str.casefold):
             if len (theDict[key]) > 0:
                 print (f"// from {key}")
                 for item in sorted (theDict[key]):
