@@ -51,43 +51,20 @@ class CppIncludeOrganizer (object):
         for key, value in massSearchResultDict.items ():
             massSearchResultList.append ({"locations": value, "include" : key})
         return massSearchResultList
-
-
-    def organizedPrint (self):
-
-        parentSourcesDir = None
-        while True: 
-            if not parentSourcesDir:
-                parentSourcesDir = self._file.parent
-            else:
-                parentSourcesDir = parentSourcesDir.parent
-            if parentSourcesDir.name == "Sources" and (parentSourcesDir / "BuildNum.dat").is_file ():
-                break
-
-        strParentSourcesDir = str (parentSourcesDir)
-
-        includeRegexString  = r"\s*#include\s*\"(.*)\"\s*"
-        includeRegex   		= re.compile (includeRegexString)
-
-        includes = set ()
-        with open(self._file,'r') as fin:
-            lines = fin.read ().splitlines()
-            for line in lines:
-                match = includeRegex.search (line)
-                if match:
-                    includes.add (match.group(1))
-
-        print(f'Processing {len(includes)} includes', end='', flush=True)
-
+    
+    def _getDict (self, parentSourcesDir, includes, isAddon) :
         searchResults = self._massSearch (parentSourcesDir, includes)
-
         theDict = dict ()
         for searchResult in searchResults:
             subdirs = set ()
             for location in searchResult["locations"]:
                 strLocation = str (location)
-                subdir = strLocation [len(strParentSourcesDir) + 1:]
-                subdir = subdir[0: subdir.find ("\\")]
+                subdir = strLocation [len(str (parentSourcesDir)) + 1:]
+                if isAddon and subdir.startswith ("Modules"):
+                    subdir = subdir[0: subdir.find ("\\", 8)]
+                    subdir = subdir.replace ("\\", "/")
+                else:
+                    subdir = subdir[0: subdir.find ("\\")]
                 subdirs.add (subdir)
 
             subdirs = sorted (list (subdirs))
@@ -144,7 +121,75 @@ class CppIncludeOrganizer (object):
                 if unknownDirName not in theDict:
                     theDict[unknownDirName] = set ()
                 theDict[unknownDirName].add (searchResult["include"])
-        
+        return theDict
+
+    def organizedPrint (self):
+        includeRegexString  = r"\s*#include\s*\"(.*)\"\s*"
+        includeRegex   		= re.compile (includeRegexString)
+
+        includes = set ()
+        with open(self._file,'r') as fin:
+            lines = fin.read ().splitlines()
+            for line in lines:
+                match = includeRegex.search (line)
+                if match:
+                    includes.add (match.group(1))
+
+        print(f'Processing {len(includes)} includes', end='', flush=True)
+
+        theDict = None
+
+        parentSourcesDir = None
+        while True:
+            prevParent = None
+            if not parentSourcesDir:
+                parentSourcesDir = self._file.parent
+            else:
+                prevParent = parentSourcesDir
+                parentSourcesDir = parentSourcesDir.parent
+            if parentSourcesDir.name == "Sources" and (parentSourcesDir / "BuildNum.dat").is_file ():
+                if prevParent is not None and prevParent.name == "ApiTools":
+                    theDict = dict ()
+                    modulesDevDirPath = parentSourcesDir.parent / "Bin.Win" / "Modules_VS142_64.dev" / "APIDevKit" / "Support"
+                    if modulesDevDirPath.exists and modulesDevDirPath.is_dir ():
+                        theDict = self._getDict (modulesDevDirPath, includes, True)
+                        for valuesSet in theDict.values ():
+                            for value in valuesSet:
+                                includes.remove (value)
+
+                    #theDict2 = self._getDict (modulesDevDirPath, includes, True)
+
+                    addonDir = None
+                    possibleAddonDir = None
+                    while True:
+                        if not possibleAddonDir:
+                            possibleAddonDir = self._file.parent
+                        else:
+                            possibleAddonDir = possibleAddonDir.parent
+                        if  possibleAddonDir is not None and\
+                            possibleAddonDir.parent is not None and\
+                            possibleAddonDir.parent.parent is not None and\
+                            possibleAddonDir.parent.parent.name == "ApiTools":
+                            addonDir = possibleAddonDir
+                            break
+
+                    if addonDir is not None:
+                        theDict2 = self._getDict (addonDir, includes, False)
+                        ownAddonFiles = set ()
+                        for valuesSet in theDict2.values ():
+                            for value in valuesSet:
+                                includes.remove (value)
+                                ownAddonFiles.add (value)
+                        theDict[addonDir.name] = ownAddonFiles
+
+                    if len (includes) > 0:
+                        theDict = theDict | self._getDict (parentSourcesDir, includes, True)
+
+                else:
+                    theDict = self._getDict (parentSourcesDir, includes, False)
+
+                break
+
         print(f'DONE\n', flush=True)
 
         for key in theDict:
